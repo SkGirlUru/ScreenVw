@@ -1,27 +1,21 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ScreenShare Lite</title>
+    <title>Compartir Pantalla y Audio en Tiempo Real</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <style>
-        @media (max-width: 640px) {
-            .mobile-flex-col {
-                flex-direction: column;
-            }
-        }
-        
         .video-container {
             position: relative;
             width: 100%;
+            height: 0;
             padding-bottom: 56.25%; /* 16:9 aspect ratio */
             background-color: #1a202c;
             border-radius: 0.5rem;
             overflow: hidden;
         }
-        
         .video-container video {
             position: absolute;
             top: 0;
@@ -30,7 +24,6 @@
             height: 100%;
             object-fit: contain;
         }
-        
         .status-indicator {
             width: 12px;
             height: 12px;
@@ -38,664 +31,583 @@
             display: inline-block;
             margin-right: 8px;
         }
-        
-        .status-offline {
-            background-color: #ef4444;
+        .status-live {
+            background-color: #48bb78;
+            box-shadow: 0 0 10px #48bb78;
         }
-        
-        .status-online {
-            background-color: #10b981;
+        .status-offline {
+            background-color: #e53e3e;
+        }
+        .status-connecting {
+            background-color: #ed8936;
             animation: pulse 2s infinite;
         }
-        
+        .status-error {
+            background-color: #e53e3e;
+            animation: pulse 0.5s infinite;
+        }
         @keyframes pulse {
-            0% {
-                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
-            }
-            70% {
-                box-shadow: 0 0 0 10px rgba(16, 185, 129, 0);
-            }
-            100% {
-                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
-            }
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
         }
-        
-        .btn-primary {
-            background-color: #4f46e5;
-            color: white;
-            padding: 0.75rem 1.5rem;
-            border-radius: 0.375rem;
-            font-weight: 600;
-            transition: all 0.2s;
+        .glass-effect {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
         }
-        
-        .btn-primary:hover {
-            background-color: #4338ca;
-            transform: translateY(-1px);
+        .audio-visualizer {
+            height: 40px;
+            width: 100%;
+            background-color: rgba(0, 0, 0, 0.2);
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
         }
-        
-        .btn-primary:disabled {
-            background-color: #9ca3af;
-            cursor: not-allowed;
-            transform: none;
-        }
-        
-        .btn-danger {
-            background-color: #ef4444;
-            color: white;
-            padding: 0.75rem 1.5rem;
-            border-radius: 0.375rem;
-            font-weight: 600;
-            transition: all 0.2s;
-        }
-        
-        .btn-danger:hover {
-            background-color: #dc2626;
-            transform: translateY(-1px);
+        .audio-bar {
+            position: absolute;
+            bottom: 0;
+            width: 8px;
+            background-color: #3b82f6;
+            border-radius: 4px 4px 0 0;
+            transition: height 0.1s ease;
         }
     </style>
 </head>
-<body class="bg-gray-100 min-h-screen">
+<body class="bg-gray-900 text-gray-100 min-h-screen">
     <div class="container mx-auto px-4 py-8">
         <header class="mb-8 text-center">
-            <h1 class="text-3xl md:text-4xl font-bold text-indigo-700 mb-2">ScreenShare Lite</h1>
-            <p class="text-gray-600">A lightweight alternative to Discord for screen sharing</p>
+            <h1 class="text-4xl font-bold bg-gradient-to-r from-blue-400 to-purple-600 bg-clip-text text-transparent">
+                Transmisión de Pantalla y Audio en Tiempo Real
+            </h1>
+            <p class="mt-2 text-gray-400">
+                Comparte tu pantalla y audio del sistema con baja latencia
+            </p>
         </header>
-        
-        <div class="max-w-4xl mx-auto bg-white rounded-xl shadow-md overflow-hidden p-6">
-            <div class="flex mobile-flex-col gap-6">
-                <!-- Host Panel -->
-                <div class="flex-1 bg-gray-50 p-6 rounded-lg">
-                    <h2 class="text-xl font-semibold mb-4 flex items-center">
-                        <span id="host-status" class="status-indicator status-offline"></span>
-                        Host Controls
+        <div class="max-w-4xl mx-auto">
+            <!-- Modo Emisor -->
+            <div id="broadcaster-section" class="mb-12 glass-effect rounded-xl p-6 shadow-lg">
+                <div class="flex items-center mb-4">
+                    <h2 class="text-2xl font-semibold flex items-center">
+                        <span class="status-indicator status-offline" id="broadcast-status"></span>
+                        Modo Emisor
                     </h2>
-                    
-                    <div class="space-y-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Room ID</label>
-                            <div class="flex">
-                                <input type="text" id="room-id" class="flex-1 rounded-l-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="Enter room name">
-                                <button id="create-room" class="btn-primary rounded-l-none px-4">
-                                    <i class="fas fa-door-open mr-2"></i>Create
-                                </button>
-                            </div>
-                        </div>
-                        
-                        <div id="host-controls" class="space-y-4 hidden">
-                            <div class="flex space-x-2">
-                                <button id="start-screen-share" class="btn-primary flex-1">
-                                    <i class="fas fa-desktop mr-2"></i>Share Screen
-                                </button>
-                                <button id="start-audio" class="btn-primary flex-1">
-                                    <i class="fas fa-microphone mr-2"></i>Share Audio
-                                </button>
-                            </div>
-                            
-                            <div class="video-container">
-                                <video id="host-video" autoplay muted playsinline></video>
-                            </div>
-                            
-                            <div class="flex justify-center">
-                                <button id="stop-sharing" class="btn-danger">
-                                    <i class="fas fa-stop mr-2"></i>Stop Sharing
-                                </button>
-                            </div>
-                            
-                            <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4">
-                                <div class="flex">
-                                    <div class="flex-shrink-0">
-                                        <i class="fas fa-info-circle text-yellow-400"></i>
-                                    </div>
-                                    <div class="ml-3">
-                                        <p class="text-sm text-yellow-700">
-                                            Share this room ID with viewers. They can join using the viewer panel.
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                </div>
+                <div class="video-container mb-4" id="broadcast-preview">
+                    <div class="absolute inset-0 flex items-center justify-center text-gray-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                        <p class="ml-2">Vista previa de la transmisión</p>
                     </div>
                 </div>
-                
-                <!-- Viewer Panel -->
-                <div class="flex-1 bg-gray-50 p-6 rounded-lg">
-                    <h2 class="text-xl font-semibold mb-4 flex items-center">
-                        <span id="viewer-status" class="status-indicator status-offline"></span>
-                        Viewer Controls
-                    </h2>
-                    
-                    <div class="space-y-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Room ID</label>
+                <div class="mb-4 hidden" id="audio-visualizer-container">
+                    <p class="text-sm font-medium mb-2">Nivel de audio del sistema</p>
+                    <div class="audio-visualizer" id="audio-visualizer">
+                        <!-- Las barras del visualizador de audio se generarán dinámicamente -->
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="stream-quality" class="block text-sm font-medium mb-1">Calidad de transmisión</label>
+                        <select id="stream-quality" class="w-full bg-gray-800 border border-gray-700 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="high">Alta calidad (1080p)</option>
+                            <option value="medium" selected>Calidad media (720p)</option>
+                            <option value="low">Baja calidad (480p)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="stream-fps" class="block text-sm font-medium mb-1">Cuadros por segundo (FPS)</label>
+                        <select id="stream-fps" class="w-full bg-gray-800 border border-gray-700 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="60">60 FPS (suave)</option>
+                            <option value="30" selected>30 FPS (balanceado)</option>
+                            <option value="15">15 FPS (baja latencia)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="audio-quality" class="block text-sm font-medium mb-1">Calidad de audio</label>
+                        <select id="audio-quality" class="w-full bg-gray-800 border border-gray-700 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="high">Alta calidad (256 kbps)</option>
+                            <option value="medium" selected>Calidad media (128 kbps)</option>
+                            <option value="low">Baja calidad (64 kbps)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="audio-source" class="block text-sm font-medium mb-1">Fuente de audio</label>
+                        <select id="audio-source" class="w-full bg-gray-800 border border-gray-700 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="system">Audio del sistema</option>
+                            <option value="mic">Micrófono</option>
+                            <option value="both">Ambos</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="mt-6">
+                    <button id="start-broadcast" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition duration-200 flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" />
+                        </svg>
+                        Iniciar Transmisión
+                    </button>
+                    <div id="broadcast-info" class="mt-4 hidden">
+                        <div class="bg-gray-800 rounded-lg p-4">
+                            <h3 class="font-medium text-lg mb-2">Tu transmisión está activa</h3>
+                            <p class="text-sm text-gray-400 mb-3">Comparte este enlace para que otros puedan ver tu pantalla y escuchar tu audio:</p>
                             <div class="flex">
-                                <input type="text" id="viewer-room-id" class="flex-1 rounded-l-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="Enter room ID">
-                                <button id="join-room" class="btn-primary rounded-l-none px-4">
-                                    <i class="fas fa-sign-in-alt mr-2"></i>Join
+                                <input id="broadcast-url" type="text" readonly class="flex-1 bg-gray-700 border border-gray-600 rounded-l-md py-2 px-3 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                                <button id="copy-url" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-r-md transition duration-200">
+                                    Copiar
                                 </button>
                             </div>
-                        </div>
-                        
-                        <div id="viewer-controls" class="hidden">
-                            <div class="video-container">
-                                <video id="viewer-video" autoplay playsinline></video>
-                            </div>
-                            
-                            <div class="flex justify-center mt-4">
-                                <button id="leave-room" class="btn-danger">
-                                    <i class="fas fa-sign-out-alt mr-2"></i>Leave Room
-                                </button>
-                            </div>
-                        </div>
-                        
-                        <div id="viewer-waiting" class="hidden text-center py-8">
-                            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
-                            <p class="text-gray-600">Waiting for host to start sharing...</p>
+                            <button id="stop-broadcast" class="mt-3 w-full bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-md transition duration-200 flex items-center justify-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clip-rule="evenodd" />
+                                </svg>
+                                Detener Transmisión
+                            </button>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
-        
-        <div class="mt-8 text-center text-sm text-gray-500">
-            <p>Works on Android Chrome and other modern browsers. No installation required.</p>
+            <!-- Modo Espectador -->
+            <div id="viewer-section" class="glass-effect rounded-xl p-6 shadow-lg">
+                <div class="flex items-center mb-4">
+                    <h2 class="text-2xl font-semibold flex items-center">
+                        <span class="status-indicator status-offline" id="viewer-status"></span>
+                        Modo Espectador
+                    </h2>
+                </div>
+                <div class="video-container mb-4" id="viewer-display">
+                    <div class="absolute inset-0 flex items-center justify-center text-gray-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                        <p class="ml-2">Pantalla del emisor aparecerá aquí</p>
+                    </div>
+                </div>
+                <div class="flex items-center mb-4 hidden" id="viewer-audio-controls">
+                    <button id="toggle-audio" class="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-full">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072M12 6a7.975 7.975 0 015.657 2.343m0 0a7.975 7.975 0 010 11.314m-11.314 0a7.975 7.975 0 010-11.314m0 0a7.975 7.975 0 015.657-2.343" />
+                        </svg>
+                    </button>
+                    <span class="ml-2 text-sm">Audio activado</span>
+                </div>
+                <div class="mt-4">
+                    <label for="stream-id" class="block text-sm font-medium mb-1">ID de la transmisión</label>
+                    <div class="flex">
+                        <input id="stream-id" type="text" placeholder="Ingresa el ID de la transmisión" class="flex-1 bg-gray-800 border border-gray-700 rounded-l-md py-2 px-3 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                        <button id="join-stream" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-r-md transition duration-200">
+                            Unirse
+                        </button>
+                    </div>
+                </div>
+                <div class="mt-4 hidden" id="viewer-controls">
+                    <button id="leave-stream" class="w-full bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-md transition duration-200 flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                        </svg>
+                        Salir de la Transmisión
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
-
     <script>
-        // Configuration
-        const config = {
-            iceServers: [
-                { urls: "stun:stun.l.google.com:19302" },
-                { urls: "stun:stun1.l.google.com:19302" },
-                { urls: "stun:stun2.l.google.com:19302" }
-            ]
-        };
-        
-        // WebSocket connection for signaling
-        const wsProtocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
-        const wsUrl = wsProtocol + window.location.host + '/ws';
-        let socket = null;
-        
-        // DOM elements
+        // Configuración de PeerJS
+        const peer = new Peer({
+            host: '0.peerjs.com',
+            port: 443,
+            path: '/',
+            secure: true,
+            debug: 3
+        });
+        // Variables globales
+        let peerId = null;
+        let mediaStream = null;
+        let audioStream = null;
+        let combinedStream = null;
+        let currentCall = null;
+        let broadcastActive = false;
+        let viewerActive = false;
+        let audioContext = null;
+        let analyser = null;
+        let audioEnabled = true;
+        // Elementos del DOM
         const elements = {
-            hostStatus: document.getElementById('host-status'),
+            broadcastStatus: document.getElementById('broadcast-status'),
+            broadcastPreview: document.getElementById('broadcast-preview'),
+            startBroadcastBtn: document.getElementById('start-broadcast'),
+            stopBroadcastBtn: document.getElementById('stop-broadcast'),
+            broadcastInfo: document.getElementById('broadcast-info'),
+            broadcastUrl: document.getElementById('broadcast-url'),
+            copyUrlBtn: document.getElementById('copy-url'),
+            streamQuality: document.getElementById('stream-quality'),
+            streamFps: document.getElementById('stream-fps'),
+            audioQuality: document.getElementById('audio-quality'),
+            audioSource: document.getElementById('audio-source'),
+            audioVisualizer: document.getElementById('audio-visualizer'),
+            audioVisualizerContainer: document.getElementById('audio-visualizer-container'),
             viewerStatus: document.getElementById('viewer-status'),
-            roomId: document.getElementById('room-id'),
-            createRoomBtn: document.getElementById('create-room'),
-            hostControls: document.getElementById('host-controls'),
-            startScreenShareBtn: document.getElementById('start-screen-share'),
-            startAudioBtn: document.getElementById('start-audio'),
-            hostVideo: document.getElementById('host-video'),
-            stopSharingBtn: document.getElementById('stop-sharing'),
-            viewerRoomId: document.getElementById('viewer-room-id'),
-            joinRoomBtn: document.getElementById('join-room'),
+            viewerDisplay: document.getElementById('viewer-display'),
+            streamIdInput: document.getElementById('stream-id'),
+            joinStreamBtn: document.getElementById('join-stream'),
+            leaveStreamBtn: document.getElementById('leave-stream'),
             viewerControls: document.getElementById('viewer-controls'),
-            viewerVideo: document.getElementById('viewer-video'),
-            leaveRoomBtn: document.getElementById('leave-room'),
-            viewerWaiting: document.getElementById('viewer-waiting')
+            viewerAudioControls: document.getElementById('viewer-audio-controls'),
+            toggleAudioBtn: document.getElementById('toggle-audio')
         };
-        
-        // Application state
-        let state = {
-            isHost: false,
-            roomId: null,
-            peerConnection: null,
-            localStream: null,
-            screenStream: null,
-            audioStream: null
-        };
-        
-        // Initialize the application
-        function init() {
-            setupEventListeners();
-            checkBrowserCompatibility();
+        // Eventos PeerJS
+        peer.on('open', (id) => {
+            peerId = id;
+            console.log('ID de Peer:', id);
+        });
+        peer.on('error', (err) => {
+            console.error('Error de PeerJS:', err);
+            updateStatus('broadcast', 'error');
+            updateStatus('viewer', 'error');
+        });
+        // Eventos para el modo emisor
+        elements.startBroadcastBtn.addEventListener('click', startBroadcast);
+        elements.stopBroadcastBtn.addEventListener('click', stopBroadcast);
+        elements.copyUrlBtn.addEventListener('click', copyBroadcastUrl);
+        // Eventos para el modo espectador
+        elements.joinStreamBtn.addEventListener('click', joinStream);
+        elements.leaveStreamBtn.addEventListener('click', leaveStream);
+        elements.toggleAudioBtn.addEventListener('click', toggleAudio);
+        // Función para iniciar la transmisión
+        async function startBroadcast() {
+            updateStatus('broadcast', 'connecting');
+            try {
+                // Obtener la pantalla para compartir
+                const constraints = getStreamConstraints();
+                mediaStream = await navigator.mediaDevices.getDisplayMedia({
+                    video: constraints.video,
+                    audio: false // No capturamos audio de la pantalla
+                });
+                // Obtener el audio según la fuente seleccionada
+                const audioSource = elements.audioSource.value;
+                if (audioSource !== 'none') {
+                    try {
+                        audioStream = await captureSystemAudio();
+                        setupAudioVisualizer(audioStream);
+                        // Combinar los streams de video y audio
+                        combinedStream = new MediaStream([
+                            ...mediaStream.getVideoTracks(),
+                            ...audioStream.getAudioTracks()
+                        ]);
+                    } catch (audioError) {
+                        console.error('Error al capturar audio:', audioError);
+                        // Continuar solo con video si falla el audio
+                        combinedStream = mediaStream;
+                    }
+                } else {
+                    combinedStream = mediaStream;
+                }
+                // Mostrar vista previa
+                const previewVideo = document.createElement('video');
+                previewVideo.srcObject = mediaStream;
+                previewVideo.autoplay = true;
+                previewVideo.playsInline = true;
+                elements.broadcastPreview.innerHTML = '';
+                elements.broadcastPreview.appendChild(previewVideo);
+                // Configurar el ID de transmisión
+                const url = `${window.location.origin}${window.location.pathname}?watch=${peerId}`;
+                elements.broadcastUrl.value = url;
+                // Mostrar controles de transmisión
+                elements.broadcastInfo.classList.remove('hidden');
+                elements.startBroadcastBtn.classList.add('hidden');
+                updateStatus('broadcast', 'live');
+                broadcastActive = true;
+                // Escuchar conexiones entrantes
+                peer.on('call', (call) => {
+                    call.answer(combinedStream || mediaStream);
+                    currentCall = call;
+                    call.on('stream', (remoteStream) => {
+                        // No es necesario para el emisor, pero lo mantenemos para posibles extensiones
+                    });
+                    call.on('close', () => {
+                        console.log('El espectador se ha desconectado');
+                    });
+                });
+            } catch (err) {
+                console.error('Error al compartir pantalla:', err);
+                updateStatus('broadcast', 'error');
+                alert('No se pudo iniciar la transmisión. Asegúrate de permitir el acceso a tu pantalla.');
+            }
         }
-        
-        // Set up event listeners
-        function setupEventListeners() {
-            elements.createRoomBtn.addEventListener('click', createRoom);
-            elements.joinRoomBtn.addEventListener('click', joinRoom);
-            elements.startScreenShareBtn.addEventListener('click', startScreenShare);
-            elements.startAudioBtn.addEventListener('click', startAudioShare);
-            elements.stopSharingBtn.addEventListener('click', stopSharing);
-            elements.leaveRoomBtn.addEventListener('click', leaveRoom);
-            
-            // Handle Enter key in input fields
-            elements.roomId.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') createRoom();
-            });
-            
-            elements.viewerRoomId.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') joinRoom();
-            });
+        // Función para capturar audio del sistema (usando la API de captura de pantalla con audio)
+        async function captureSystemAudio() {
+            try {
+                // Intenta capturar pantalla con audio (solo funciona en Chrome con flags específicos)
+                const streamWithAudio = await navigator.mediaDevices.getDisplayMedia({
+                    video: true,
+                    audio: {
+                        echoCancellation: false,
+                        noiseSuppression: false,
+                        autoGainControl: false
+                    }
+                });
+                // Solo nos quedamos con las pistas de audio
+                const audioTracks = streamWithAudio.getAudioTracks();
+                if (audioTracks.length === 0) {
+                    throw new Error('No se pudo capturar audio del sistema');
+                }
+                // Detenemos las pistas de video que no necesitamos
+                streamWithAudio.getVideoTracks().forEach(track => track.stop());
+                return new MediaStream(audioTracks);
+            } catch (err) {
+                console.error('Error al capturar audio del sistema:', err);
+                // Fallback: intentar capturar audio del micrófono
+                try {
+                    const micStream = await navigator.mediaDevices.getUserMedia({
+                        audio: {
+                            echoCancellation: false,
+                            noiseSuppression: false,
+                            autoGainControl: false
+                        },
+                        video: false
+                    });
+                    return micStream;
+                } catch (micError) {
+                    console.error('Error al capturar audio del micrófono:', micError);
+                    throw micError;
+                }
+            }
         }
-        
-        // Check browser compatibility
-        function checkBrowserCompatibility() {
-            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                alert('Your browser does not support media devices. Please use a modern browser like Chrome or Firefox.');
+        // Configurar visualizador de audio
+        function setupAudioVisualizer(stream) {
+            elements.audioVisualizerContainer.classList.remove('hidden');
+            // Crear barras del visualizador
+            elements.audioVisualizer.innerHTML = '';
+            for (let i = 0; i < 32; i++) {
+                const bar = document.createElement('div');
+                bar.className = 'audio-bar';
+                bar.style.left = `${i * 10}px`;
+                elements.audioVisualizer.appendChild(bar);
+            }
+            // Configurar AudioContext y Analyser
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            analyser = audioContext.createAnalyser();
+            analyser.fftSize = 64;
+            const source = audioContext.createMediaStreamSource(stream);
+            source.connect(analyser);
+            // Actualizar visualización
+            const bars = elements.audioVisualizer.querySelectorAll('.audio-bar');
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            function updateVisualizer() {
+                if (!analyser) return;
+                analyser.getByteFrequencyData(dataArray);
+                for (let i = 0; i < bars.length; i++) {
+                    const value = dataArray[i] || 0;
+                    const percent = value / 255;
+                    const height = `${Math.max(2, percent * 100)}%`;
+                    bars[i].style.height = height;
+                    bars[i].style.backgroundColor = `hsl(${200 + (percent * 60)}, 80%, 50%)`;
+                }
+                requestAnimationFrame(updateVisualizer);
+            }
+            updateVisualizer();
+        }
+        // Función para detener la transmisión
+        function stopBroadcast() {
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(track => track.stop());
+                mediaStream = null;
+            }
+            if (audioStream) {
+                audioStream.getTracks().forEach(track => track.stop());
+                audioStream = null;
+            }
+            if (audioContext) {
+                audioContext.close();
+                audioContext = null;
+                analyser = null;
+            }
+            if (currentCall) {
+                currentCall.close();
+                currentCall = null;
+            }
+            elements.broadcastPreview.innerHTML = `
+                <div class="absolute inset-0 flex items-center justify-center text-gray-400">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                    <p class="ml-2">Vista previa de la transmisión</p>
+                </div>
+            `;
+            elements.audioVisualizerContainer.classList.add('hidden');
+            elements.broadcastInfo.classList.add('hidden');
+            elements.startBroadcastBtn.classList.remove('hidden');
+            updateStatus('broadcast', 'offline');
+            broadcastActive = false;
+        }
+        // Función para unirse a una transmisión
+        function joinStream() {
+            const streamId = elements.streamIdInput.value.trim();
+            if (!streamId) {
+                alert('Por favor ingresa un ID de transmisión válido');
                 return;
             }
+            updateStatus('viewer', 'connecting');
             
-            if (!RTCPeerConnection) {
-                alert('WebRTC is not supported by your browser. Please use a modern browser like Chrome or Firefox.');
-                return;
-            }
-        }
-        
-        // Connect to WebSocket server
-        function connectWebSocket() {
-            if (socket && socket.readyState === WebSocket.OPEN) return;
-            
-            socket = new WebSocket(wsUrl);
-            
-            socket.onopen = () => {
-                console.log('WebSocket connected');
-                if (state.isHost) {
-                    elements.hostStatus.classList.remove('status-offline');
-                    elements.hostStatus.classList.add('status-online');
-                } else {
-                    elements.viewerStatus.classList.remove('status-offline');
-                    elements.viewerStatus.classList.add('status-online');
-                }
-            };
-            
-            socket.onclose = () => {
-                console.log('WebSocket disconnected');
-                if (state.isHost) {
-                    elements.hostStatus.classList.remove('status-online');
-                    elements.hostStatus.classList.add('status-offline');
-                } else {
-                    elements.viewerStatus.classList.remove('status-online');
-                    elements.viewerStatus.classList.add('status-offline');
-                }
+            // Esperar a que el peer esté listo
+            const waitForPeer = new Promise(resolve => {
+                if (peer.open) resolve();
+                else peer.once('open', resolve);
+            });
+
+            waitForPeer.then(() => {
+                const call = peer.call(streamId, null);
+                currentCall = call;
                 
-                // Try to reconnect after a delay
-                setTimeout(connectWebSocket, 3000);
-            };
-            
-            socket.onerror = (error) => {
-                console.error('WebSocket error:', error);
-            };
-            
-            socket.onmessage = handleWebSocketMessage;
+                call.on('stream', (remoteStream) => {
+                    // Mostrar el stream remoto
+                    const viewerVideo = document.createElement('video');
+                    viewerVideo.srcObject = remoteStream;
+                    viewerVideo.autoplay = true;
+                    viewerVideo.playsInline = true;
+                    viewerVideo.muted = false; // Asegurar que no esté silenciado
+                    elements.viewerDisplay.innerHTML = '';
+                    elements.viewerDisplay.appendChild(viewerVideo);
+                    
+                    // Mostrar controles de audio si hay pistas de audio
+                    if (remoteStream.getAudioTracks().length > 0) {
+                        elements.viewerAudioControls.classList.remove('hidden');
+                    }
+                    elements.viewerControls.classList.remove('hidden');
+                    updateStatus('viewer', 'live');
+                    viewerActive = true;
+                });
+                
+                call.on('close', () => {
+                    leaveStream();
+                });
+                
+                call.on('error', (err) => {
+                    console.error('Error en la llamada:', err);
+                    updateStatus('viewer', 'error');
+                    alert('No se pudo conectar a la transmisión. Verifica el ID e intenta nuevamente.');
+                });
+            });
         }
-        
-        // Handle WebSocket messages
-        function handleWebSocketMessage(event) {
-            const message = JSON.parse(event.data);
-            console.log('Received message:', message);
-            
-            switch (message.type) {
-                case 'offer':
-                    if (!state.isHost) handleOffer(message);
+        // Función para salir de una transmisión
+        function leaveStream() {
+            if (currentCall) {
+                currentCall.close();
+                currentCall = null;
+            }
+            elements.viewerDisplay.innerHTML = `
+                <div class="absolute inset-0 flex items-center justify-center text-gray-400">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                    <p class="ml-2">Pantalla del emisor aparecerá aquí</p>
+                </div>
+            `;
+            elements.viewerControls.classList.add('hidden');
+            elements.viewerAudioControls.classList.add('hidden');
+            updateStatus('viewer', 'offline');
+            viewerActive = false;
+            audioEnabled = true;
+        }
+        // Función para activar/desactivar audio
+        function toggleAudio() {
+            audioEnabled = !audioEnabled;
+            if (currentCall && currentCall.remoteStream) {
+                currentCall.remoteStream.getAudioTracks().forEach(track => {
+                    track.enabled = audioEnabled;
+                });
+            }
+            elements.toggleAudioBtn.innerHTML = audioEnabled ? 
+                '<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072M12 6a7.975 7.975 0 015.657 2.343m0 0a7.975 7.975 0 010 11.314m-11.314 0a7.975 7.975 0 010-11.314m0 0a7.975 7.975 0 015.657-2.343" /></svg>' :
+                '<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" clip-rule="evenodd" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" /></svg>';
+            const audioText = elements.toggleAudioBtn.nextElementSibling;
+            audioText.textContent = audioEnabled ? 'Audio activado' : 'Audio desactivado';
+        }
+        // Función para copiar la URL de transmisión
+        function copyBroadcastUrl() {
+            elements.broadcastUrl.select();
+            document.execCommand('copy');
+            // Feedback visual
+            const originalText = elements.copyUrlBtn.textContent;
+            elements.copyUrlBtn.textContent = '¡Copiado!';
+            setTimeout(() => {
+                elements.copyUrlBtn.textContent = originalText;
+            }, 2000);
+        }
+        // Función para obtener las restricciones del stream según la configuración
+        function getStreamConstraints() {
+            const quality = elements.streamQuality.value;
+            const fps = parseInt(elements.streamFps.value);
+            let width, height;
+            switch (quality) {
+                case 'high':
+                    width = 1920;
+                    height = 1080;
                     break;
-                case 'answer':
-                    if (state.isHost) handleAnswer(message);
+                case 'medium':
+                    width = 1280;
+                    height = 720;
                     break;
-                case 'ice-candidate':
-                    handleICECandidate(message);
+                case 'low':
+                    width = 854;
+                    height = 480;
                     break;
-                case 'room-created':
-                    handleRoomCreated(message);
+                default:
+                    width = 1280;
+                    height = 720;
+            }
+            return {
+                video: {
+                    width: { ideal: width },
+                    height: { ideal: height },
+                    frameRate: { ideal: fps, max: fps },
+                    cursor: 'always'
+                }
+            };
+        }
+        // Función para actualizar el estado visual
+        function updateStatus(mode, status) {
+            const statusElement = mode === 'broadcast' ? elements.broadcastStatus : elements.viewerStatus;
+            // Remover todas las clases de estado
+            statusElement.classList.remove('status-live', 'status-offline', 'status-connecting', 'status-error');
+            switch (status) {
+                case 'live':
+                    statusElement.classList.add('status-live');
                     break;
-                case 'room-joined':
-                    handleRoomJoined(message);
+                case 'offline':
+                    statusElement.classList.add('status-offline');
+                    break;
+                case 'connecting':
+                    statusElement.classList.add('status-connecting');
                     break;
                 case 'error':
-                    handleErrorMessage(message);
+                    statusElement.classList.add('status-error');
                     break;
+                default:
+                    statusElement.classList.add('status-offline');
             }
         }
-        
-        // Create a new room as host
-        function createRoom() {
-            const roomId = elements.roomId.value.trim();
-            if (!roomId) {
-                alert('Please enter a room name');
-                return;
+        // Verificar si hay un parámetro de transmisión en la URL
+        window.addEventListener('DOMContentLoaded', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const watchId = urlParams.get('watch');
+            if (watchId) {
+                elements.streamIdInput.value = watchId;
+                // No unirse automáticamente, permitir al usuario decidir
             }
-            
-            state.isHost = true;
-            state.roomId = roomId;
-            
-            connectWebSocket();
-            
-            // Show host controls
-            elements.hostControls.classList.remove('hidden');
-            elements.createRoomBtn.disabled = true;
-            elements.roomId.disabled = true;
-            
-            // Initialize peer connection
-            initializePeerConnection();
-            
-            // Send room creation message to server
-            if (socket.readyState === WebSocket.OPEN) {
-                socket.send(JSON.stringify({
-                    type: 'create-room',
-                    roomId: roomId
-                }));
+        });
+        // Manejar cierre de la página
+        window.addEventListener('beforeunload', () => {
+            if (broadcastActive) {
+                stopBroadcast();
             }
-        }
-        
-        // Join an existing room as viewer
-        function joinRoom() {
-            const roomId = elements.viewerRoomId.value.trim();
-            if (!roomId) {
-                alert('Please enter a room ID');
-                return;
+            if (viewerActive) {
+                leaveStream();
             }
-            
-            state.isHost = false;
-            state.roomId = roomId;
-            
-            connectWebSocket();
-            
-            // Show viewer waiting state
-            elements.viewerControls.classList.add('hidden');
-            elements.viewerWaiting.classList.remove('hidden');
-            elements.joinRoomBtn.disabled = true;
-            elements.viewerRoomId.disabled = true;
-            
-            // Initialize peer connection
-            initializePeerConnection();
-            
-            // Send room join message to server
-            if (socket.readyState === WebSocket.OPEN) {
-                socket.send(JSON.stringify({
-                    type: 'join-room',
-                    roomId: roomId
-                }));
-            }
-        }
-        
-        // Initialize WebRTC peer connection
-        function initializePeerConnection() {
-            state.peerConnection = new RTCPeerConnection(config);
-            
-            state.peerConnection.onicecandidate = (event) => {
-                if (event.candidate) {
-                    console.log('Sending ICE candidate');
-                    socket.send(JSON.stringify({
-                        type: 'ice-candidate',
-                        candidate: event.candidate,
-                        roomId: state.roomId,
-                        isHost: state.isHost
-                    }));
-                }
-            };
-            
-            state.peerConnection.ontrack = (event) => {
-                console.log('Received remote stream');
-                if (state.isHost) {
-                    // Host doesn't expect to receive streams
-                } else {
-                    if (event.streams && event.streams[0]) {
-                        elements.viewerVideo.srcObject = event.streams[0];
-                        elements.viewerWaiting.classList.add('hidden');
-                        elements.viewerControls.classList.remove('hidden');
-                    }
-                }
-            };
-            
-            state.peerConnection.onconnectionstatechange = () => {
-                console.log('Connection state:', state.peerConnection.connectionState);
-                if (state.peerConnection.connectionState === 'disconnected' ||
-                    state.peerConnection.connectionState === 'failed') {
-                    alert('Connection lost. Please try again.');
-                    resetState();
-                }
-            };
-        }
-        
-        // Start screen sharing
-        async function startScreenShare() {
-            try {
-                // Check for screen sharing support
-                if (!navigator.mediaDevices.getDisplayMedia) {
-                    alert('Screen sharing is not supported in your browser');
-                    return;
-                }
-                
-                // Get screen stream
-                state.screenStream = await navigator.mediaDevices.getDisplayMedia({
-                    video: {
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 },
-                        frameRate: { ideal: 15 }
-                    },
-                    audio: false
-                });
-                
-                // Add screen track to peer connection
-                state.screenStream.getTracks().forEach(track => {
-                    state.peerConnection.addTrack(track, state.screenStream);
-                });
-                
-                // Show screen in host video element
-                elements.hostVideo.srcObject = state.screenStream;
-                
-                // Handle when user stops sharing via browser UI
-                state.screenStream.getVideoTracks()[0].onended = () => {
-                    stopSharing();
-                };
-                
-                // Create and send offer
-                if (state.isHost) {
-                    const offer = await state.peerConnection.createOffer();
-                    await state.peerConnection.setLocalDescription(offer);
-                    
-                    socket.send(JSON.stringify({
-                        type: 'offer',
-                        sdp: offer.sdp,
-                        roomId: state.roomId
-                    }));
-                }
-                
-                elements.startScreenShareBtn.disabled = true;
-                elements.startScreenShareBtn.textContent = 'Screen Sharing';
-                
-            } catch (error) {
-                console.error('Error starting screen share:', error);
-                alert('Failed to start screen sharing: ' + error.message);
-            }
-        }
-        
-        // Start audio sharing
-        async function startAudioShare() {
-            try {
-                // Get audio stream
-                state.audioStream = await navigator.mediaDevices.getUserMedia({
-                    audio: true,
-                    video: false
-                });
-                
-                // Add audio track to peer connection
-                state.audioStream.getAudioTracks().forEach(track => {
-                    state.peerConnection.addTrack(track, state.audioStream);
-                });
-                
-                // Create and send offer if not already done
-                if (state.isHost && !state.peerConnection.currentRemoteDescription) {
-                    const offer = await state.peerConnection.createOffer();
-                    await state.peerConnection.setLocalDescription(offer);
-                    
-                    socket.send(JSON.stringify({
-                        type: 'offer',
-                        sdp: offer.sdp,
-                        roomId: state.roomId
-                    }));
-                }
-                
-                elements.startAudioBtn.disabled = true;
-                elements.startAudioBtn.textContent = 'Audio Sharing';
-                
-            } catch (error) {
-                console.error('Error starting audio share:', error);
-                alert('Failed to start audio sharing: ' + error.message);
-            }
-        }
-        
-        // Handle offer from host
-        async function handleOffer(message) {
-            try {
-                await state.peerConnection.setRemoteDescription(new RTCSessionDescription({
-                    type: 'offer',
-                    sdp: message.sdp
-                }));
-                
-                const answer = await state.peerConnection.createAnswer();
-                await state.peerConnection.setLocalDescription(answer);
-                
-                socket.send(JSON.stringify({
-                    type: 'answer',
-                    sdp: answer.sdp,
-                    roomId: state.roomId
-                }));
-                
-            } catch (error) {
-                console.error('Error handling offer:', error);
-                alert('Error handling offer: ' + error.message);
-            }
-        }
-        
-        // Handle answer from viewer
-        async function handleAnswer(message) {
-            try {
-                await state.peerConnection.setRemoteDescription(new RTCSessionDescription({
-                    type: 'answer',
-                    sdp: message.sdp
-                }));
-            } catch (error) {
-                console.error('Error handling answer:', error);
-                alert('Error handling answer: ' + error.message);
-            }
-        }
-        
-        // Handle ICE candidate
-        async function handleICECandidate(message) {
-            try {
-                if (message.candidate) {
-                    await state.peerConnection.addIceCandidate(new RTCIceCandidate(message.candidate));
-                }
-            } catch (error) {
-                console.error('Error adding ICE candidate:', error);
-            }
-        }
-        
-        // Handle room created confirmation
-        function handleRoomCreated(message) {
-            if (message.success) {
-                console.log('Room created successfully');
-            } else {
-                alert('Failed to create room: ' + message.error);
-                resetState();
-            }
-        }
-        
-        // Handle room joined confirmation
-        function handleRoomJoined(message) {
-            if (message.success) {
-                console.log('Joined room successfully');
-            } else {
-                alert('Failed to join room: ' + message.error);
-                resetState();
-            }
-        }
-        
-        // Handle error messages
-        function handleErrorMessage(message) {
-            alert('Error: ' + message.error);
-            resetState();
-        }
-        
-        // Stop sharing and clean up
-        function stopSharing() {
-            if (state.screenStream) {
-                state.screenStream.getTracks().forEach(track => track.stop());
-                state.screenStream = null;
-            }
-            
-            if (state.audioStream) {
-                state.audioStream.getTracks().forEach(track => track.stop());
-                state.audioStream = null;
-            }
-            
-            if (elements.hostVideo.srcObject) {
-                elements.hostVideo.srcObject.getTracks().forEach(track => track.stop());
-                elements.hostVideo.srcObject = null;
-            }
-            
-            if (state.peerConnection) {
-                state.peerConnection.close();
-                state.peerConnection = null;
-            }
-            
-            resetState();
-        }
-        
-        // Leave room as viewer
-        function leaveRoom() {
-            if (elements.viewerVideo.srcObject) {
-                elements.viewerVideo.srcObject.getTracks().forEach(track => track.stop());
-                elements.viewerVideo.srcObject = null;
-            }
-            
-            if (state.peerConnection) {
-                state.peerConnection.close();
-                state.peerConnection = null;
-            }
-            
-            resetState();
-        }
-        
-        // Reset application state
-        function resetState() {
-            if (socket && socket.readyState === WebSocket.OPEN) {
-                socket.send(JSON.stringify({
-                    type: 'leave-room',
-                    roomId: state.roomId,
-                    isHost: state.isHost
-                }));
-            }
-            
-            state = {
-                isHost: false,
-                roomId: null,
-                peerConnection: null,
-                localStream: null,
-                screenStream: null,
-                audioStream: null
-            };
-            
-            // Reset UI
-            elements.hostStatus.classList.remove('status-online');
-            elements.hostStatus.classList.add('status-offline');
-            elements.viewerStatus.classList.remove('status-online');
-            elements.viewerStatus.classList.add('status-offline');
-            
-            elements.hostControls.classList.add('hidden');
-            elements.viewerControls.classList.add('hidden');
-            elements.viewerWaiting.classList.add('hidden');
-            
-            elements.createRoomBtn.disabled = false;
-            elements.joinRoomBtn.disabled = false;
-            elements.roomId.disabled = false;
-            elements.viewerRoomId.disabled = false;
-            
-            elements.startScreenShareBtn.disabled = false;
-            elements.startScreenShareBtn.innerHTML = '<i class="fas fa-desktop mr-2"></i>Share Screen';
-            
-            elements.startAudioBtn.disabled = false;
-            elements.startAudioBtn.innerHTML = '<i class="fas fa-microphone mr-2"></i>Share Audio';
-            
-            elements.roomId.value = '';
-            elements.viewerRoomId.value = '';
-        }
-        
-        // Initialize the app when DOM is loaded
-        document.addEventListener('DOMContentLoaded', init);
+        });
     </script>
 </body>
 </html>
