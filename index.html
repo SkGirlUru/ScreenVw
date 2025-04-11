@@ -65,7 +65,6 @@
                 Comparte tu pantalla con baja latencia o únete a una transmisión existente
             </p>
         </header>
-
         <div class="max-w-4xl mx-auto">
             <!-- Modo Emisor -->
             <div id="broadcaster-section" class="mb-12 glass-effect rounded-xl p-6 shadow-lg">
@@ -75,7 +74,6 @@
                         Modo Emisor
                     </h2>
                 </div>
-                
                 <div class="video-container mb-4" id="broadcast-preview">
                     <div class="absolute inset-0 flex items-center justify-center text-gray-400">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -84,7 +82,6 @@
                         <p class="ml-2">Vista previa de la transmisión</p>
                     </div>
                 </div>
-                
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label for="stream-quality" class="block text-sm font-medium mb-1">Calidad de transmisión</label>
@@ -94,7 +91,6 @@
                             <option value="low">Baja calidad (480p)</option>
                         </select>
                     </div>
-                    
                     <div>
                         <label for="stream-fps" class="block text-sm font-medium mb-1">Cuadros por segundo (FPS)</label>
                         <select id="stream-fps" class="w-full bg-gray-800 border border-gray-700 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500">
@@ -104,7 +100,6 @@
                         </select>
                     </div>
                 </div>
-                
                 <div class="mt-6">
                     <button id="start-broadcast" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition duration-200 flex items-center justify-center">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
@@ -112,19 +107,16 @@
                         </svg>
                         Iniciar Transmisión
                     </button>
-                    
                     <div id="broadcast-info" class="mt-4 hidden">
                         <div class="bg-gray-800 rounded-lg p-4">
                             <h3 class="font-medium text-lg mb-2">Tu transmisión está activa</h3>
                             <p class="text-sm text-gray-400 mb-3">Comparte este enlace para que otros puedan ver tu pantalla:</p>
-                            
                             <div class="flex">
                                 <input id="broadcast-url" type="text" readonly class="flex-1 bg-gray-700 border border-gray-600 rounded-l-md py-2 px-3 focus:outline-none focus:ring-1 focus:ring-blue-500">
                                 <button id="copy-url" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-r-md transition duration-200">
                                     Copiar
                                 </button>
                             </div>
-                            
                             <button id="stop-broadcast" class="mt-3 w-full bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-md transition duration-200 flex items-center justify-center">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
                                     <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clip-rule="evenodd" />
@@ -135,7 +127,6 @@
                     </div>
                 </div>
             </div>
-            
             <!-- Modo Espectador -->
             <div id="viewer-section" class="glass-effect rounded-xl p-6 shadow-lg">
                 <div class="flex items-center mb-4">
@@ -144,7 +135,6 @@
                         Modo Espectador
                     </h2>
                 </div>
-                
                 <div class="video-container mb-4" id="viewer-display">
                     <div class="absolute inset-0 flex items-center justify-center text-gray-400">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -153,7 +143,6 @@
                         <p class="ml-2">Pantalla del emisor aparecerá aquí</p>
                     </div>
                 </div>
-                
                 <div class="mt-4">
                     <label for="stream-id" class="block text-sm font-medium mb-1">ID de la transmisión</label>
                     <div class="flex">
@@ -163,7 +152,6 @@
                         </button>
                     </div>
                 </div>
-                
                 <div class="mt-4 hidden" id="viewer-controls">
                     <button id="leave-stream" class="w-full bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-md transition duration-200 flex items-center justify-center">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
@@ -175,7 +163,6 @@
             </div>
         </div>
     </div>
-
     <script>
         // Configuración de PeerJS
         const peer = new Peer({
@@ -185,14 +172,12 @@
             secure: true,
             debug: 3
         });
-
         // Variables globales
         let peerId = null;
         let mediaStream = null;
         let currentCall = null;
         let broadcastActive = false;
         let viewerActive = false;
-
         // Elementos del DOM
         const elements = {
             broadcastStatus: document.getElementById('broadcast-status'),
@@ -204,7 +189,6 @@
             copyUrlBtn: document.getElementById('copy-url'),
             streamQuality: document.getElementById('stream-quality'),
             streamFps: document.getElementById('stream-fps'),
-            
             viewerStatus: document.getElementById('viewer-status'),
             viewerDisplay: document.getElementById('viewer-display'),
             streamIdInput: document.getElementById('stream-id'),
@@ -212,89 +196,69 @@
             leaveStreamBtn: document.getElementById('leave-stream'),
             viewerControls: document.getElementById('viewer-controls')
         };
-
         // Eventos PeerJS
         peer.on('open', (id) => {
             peerId = id;
             console.log('ID de Peer:', id);
         });
-
         peer.on('error', (err) => {
             console.error('Error de PeerJS:', err);
             updateStatus('broadcast', 'error');
             updateStatus('viewer', 'error');
         });
-
         // Eventos para el modo emisor
         elements.startBroadcastBtn.addEventListener('click', startBroadcast);
         elements.stopBroadcastBtn.addEventListener('click', stopBroadcast);
         elements.copyUrlBtn.addEventListener('click', copyBroadcastUrl);
-
         // Eventos para el modo espectador
         elements.joinStreamBtn.addEventListener('click', joinStream);
         elements.leaveStreamBtn.addEventListener('click', leaveStream);
-
         // Función para iniciar la transmisión
         async function startBroadcast() {
             updateStatus('broadcast', 'connecting');
-            
             try {
                 // Obtener la pantalla para compartir
                 const constraints = getStreamConstraints();
                 mediaStream = await navigator.mediaDevices.getDisplayMedia(constraints);
-                
                 // Mostrar vista previa
                 const previewVideo = document.createElement('video');
                 previewVideo.srcObject = mediaStream;
                 previewVideo.autoplay = true;
                 previewVideo.playsInline = true;
-                
                 elements.broadcastPreview.innerHTML = '';
                 elements.broadcastPreview.appendChild(previewVideo);
-                
                 // Configurar el ID de transmisión
                 const url = `${window.location.origin}${window.location.pathname}?watch=${peerId}`;
                 elements.broadcastUrl.value = url;
-                
                 // Mostrar controles de transmisión
                 elements.broadcastInfo.classList.remove('hidden');
                 elements.startBroadcastBtn.classList.add('hidden');
                 updateStatus('broadcast', 'live');
                 broadcastActive = true;
-                
                 // Escuchar conexiones entrantes
                 peer.on('call', (call) => {
-                    call.answer(mediaStream);
+                    call.answer(mediaStream); // Responder con el stream de pantalla compartida
                     currentCall = call;
-                    
-                    call.on('stream', (remoteStream) => {
-                        // No es necesario para el emisor, pero lo mantenemos para posibles extensiones
-                    });
-                    
                     call.on('close', () => {
                         console.log('El espectador se ha desconectado');
                     });
                 });
-                
             } catch (err) {
                 console.error('Error al compartir pantalla:', err);
                 updateStatus('broadcast', 'error');
                 alert('No se pudo iniciar la transmisión. Asegúrate de permitir el acceso a tu pantalla.');
             }
         }
-
         // Función para detener la transmisión
         function stopBroadcast() {
             if (mediaStream) {
                 mediaStream.getTracks().forEach(track => track.stop());
                 mediaStream = null;
             }
-            
             if (currentCall) {
                 currentCall.close();
                 currentCall = null;
             }
-            
             elements.broadcastPreview.innerHTML = `
                 <div class="absolute inset-0 flex items-center justify-center text-gray-400">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -303,13 +267,11 @@
                     <p class="ml-2">Vista previa de la transmisión</p>
                 </div>
             `;
-            
             elements.broadcastInfo.classList.add('hidden');
             elements.startBroadcastBtn.classList.remove('hidden');
             updateStatus('broadcast', 'offline');
             broadcastActive = false;
         }
-
         // Función para unirse a una transmisión
         function joinStream() {
             const streamId = elements.streamIdInput.value.trim();
@@ -317,45 +279,36 @@
                 alert('Por favor ingresa un ID de transmisión válido');
                 return;
             }
-            
             updateStatus('viewer', 'connecting');
-            
             const call = peer.call(streamId, null);
             currentCall = call;
-            
             call.on('stream', (remoteStream) => {
                 // Mostrar el stream remoto
                 const viewerVideo = document.createElement('video');
                 viewerVideo.srcObject = remoteStream;
                 viewerVideo.autoplay = true;
                 viewerVideo.playsInline = true;
-                
                 elements.viewerDisplay.innerHTML = '';
                 elements.viewerDisplay.appendChild(viewerVideo);
-                
                 elements.viewerControls.classList.remove('hidden');
                 updateStatus('viewer', 'live');
                 viewerActive = true;
             });
-            
             call.on('close', () => {
                 leaveStream();
             });
-            
             call.on('error', (err) => {
                 console.error('Error en la llamada:', err);
                 updateStatus('viewer', 'error');
                 alert('No se pudo conectar a la transmisión. Verifica el ID e intenta nuevamente.');
             });
         }
-
         // Función para salir de una transmisión
         function leaveStream() {
             if (currentCall) {
                 currentCall.close();
                 currentCall = null;
             }
-            
             elements.viewerDisplay.innerHTML = `
                 <div class="absolute inset-0 flex items-center justify-center text-gray-400">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -364,17 +317,14 @@
                     <p class="ml-2">Pantalla del emisor aparecerá aquí</p>
                 </div>
             `;
-            
             elements.viewerControls.classList.add('hidden');
             updateStatus('viewer', 'offline');
             viewerActive = false;
         }
-
         // Función para copiar la URL de transmisión
         function copyBroadcastUrl() {
             elements.broadcastUrl.select();
             document.execCommand('copy');
-            
             // Feedback visual
             const originalText = elements.copyUrlBtn.textContent;
             elements.copyUrlBtn.textContent = '¡Copiado!';
@@ -382,14 +332,11 @@
                 elements.copyUrlBtn.textContent = originalText;
             }, 2000);
         }
-
         // Función para obtener las restricciones del stream según la configuración
         function getStreamConstraints() {
             const quality = elements.streamQuality.value;
             const fps = parseInt(elements.streamFps.value);
-            
             let width, height;
-            
             switch (quality) {
                 case 'high':
                     width = 1920;
@@ -407,7 +354,6 @@
                     width = 1280;
                     height = 720;
             }
-            
             return {
                 video: {
                     width: { ideal: width },
@@ -418,14 +364,11 @@
                 audio: false
             };
         }
-
         // Función para actualizar el estado visual
         function updateStatus(mode, status) {
             const statusElement = mode === 'broadcast' ? elements.broadcastStatus : elements.viewerStatus;
-            
             // Remover todas las clases de estado
             statusElement.classList.remove('status-live', 'status-offline', 'status-connecting', 'status-error');
-            
             switch (status) {
                 case 'live':
                     statusElement.classList.add('status-live');
@@ -443,24 +386,20 @@
                     statusElement.classList.add('status-offline');
             }
         }
-
         // Verificar si hay un parámetro de transmisión en la URL
         window.addEventListener('DOMContentLoaded', () => {
             const urlParams = new URLSearchParams(window.location.search);
             const watchId = urlParams.get('watch');
-            
             if (watchId) {
                 elements.streamIdInput.value = watchId;
                 // No unirse automáticamente, permitir al usuario decidir
             }
         });
-
         // Manejar cierre de la página
         window.addEventListener('beforeunload', () => {
             if (broadcastActive) {
                 stopBroadcast();
             }
-            
             if (viewerActive) {
                 leaveStream();
             }
